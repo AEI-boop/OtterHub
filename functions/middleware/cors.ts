@@ -1,4 +1,4 @@
-import { cors } from 'hono/cors';
+import { cors } from "hono/cors";
 
 // 安全修复：原实现 origin: (origin) => origin || '*' 会反射任意 Origin。
 // 改为仅放行同源请求与本地开发端口（生产前端与 API 同源；
@@ -16,9 +16,9 @@ export const corsMiddleware = cors({
       return null;
     }
   },
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowHeaders: ['Content-Type', 'Authorization', 'Range'],
-  exposeHeaders: ['Content-Length', 'Content-Range'],
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowHeaders: ["Content-Type", "Authorization", "Range"],
+  exposeHeaders: ["Content-Length", "Content-Range"],
   maxAge: 86400,
   credentials: true,
 });

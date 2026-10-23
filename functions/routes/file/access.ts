@@ -22,7 +22,7 @@ function getAuthCookie(request: Request): string | null {
 export async function getAuthorizedFileAccess(
   env: Env,
   request: Request,
-  key: string,
+  key: string
 ): Promise<FileAccessResult | Response> {
   const db = DBAdapterFactory.getAdapter(env);
   const item = await db.getFileMetadataWithValue?.(key);
