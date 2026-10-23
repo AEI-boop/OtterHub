@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { FileMetadata, MAX_FILENAME_LENGTH } from "@shared/types";
 import { DBAdapterFactory } from "@utils/db-adapter";
+import { saveThumb } from "@utils/thumb-store";
 import type { Env } from "../../types/hono";
 import { fail, ok } from "@utils/response";
 import { normalizeUploadTags, parseUploadTags } from "@utils/upload-tags";
@@ -17,7 +18,7 @@ singleUploadRoutes.post("/", async (c) => {
     }
 
     // F2：前端 canvas 重编码生成的缩略图（可选）。
-    // 上传成功后存为 R2 独立对象（thumb: 前缀 + 原图 key），
+    // 存储走 thumb-store：R2 优先，TG 适配器部署（无 R2）回退 KV。
     // metadata.thumbUrl 指向 /file/:key/thumb2 路由。
     const thumbFile = formData.get("thumb");
 
@@ -42,18 +43,18 @@ singleUploadRoutes.post("/", async (c) => {
       c.executionCtx.waitUntil.bind(c.executionCtx)
     );
 
-    // 缩略图以真实 key 落盘 R2（thumb: 前缀，与主文件同桶）
     if (
       thumbFile instanceof File &&
       thumbFile.size > 0 &&
       thumbFile.size < 2 * 1024 * 1024
     ) {
-      const r2 = c.env.oh_file_r2;
-      if (r2) {
-        const thumbKey = `thumb:${key}`;
-        await r2.put(thumbKey, await thumbFile.arrayBuffer(), {
-          httpMetadata: { contentType: thumbFile.type || "image/webp" },
-        });
+      const saved = await saveThumb(
+        c.env,
+        key,
+        await thumbFile.arrayBuffer(),
+        thumbFile.type || "image/webp"
+      );
+      if (saved) {
         // metadata 已在 uploadFile 内写入 KV，此处覆盖一次以带上 thumbUrl
         const kv = c.env.oh_file_url;
         const { value } = await kv.getWithMetadata<FileMetadata>(key);

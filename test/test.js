@@ -2,6 +2,8 @@ var assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const FormData = require("form-data");
+// Node 18+ 原生 FormData（支持 Blob append），与旧包区分命名
+const NativeFormData = globalThis.FormData;
 
 const API_URL = "http://127.0.0.1:8788";
 const PASSWORD = "123456";
@@ -320,6 +322,60 @@ describe("API Endpoints", function () {
         body.includes("blocked"),
         `expected SSRF-guard response, got: ${body}`
       );
+    });
+
+    it("F2: upload with thumb -> thumb2 serves it -> delete cleans up", async function () {
+      this.timeout(15000);
+      // wrangler dev 无 R2 绑定时 thumb-store 走 KV 路径
+      // （与 TG 适配器线上部署一致）
+      const tinyThumb = new Blob(
+        [new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00])],
+        { type: "image/webp" }
+      );
+
+      const form = new NativeFormData();
+      form.append(
+        "file",
+        new Blob(
+          [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+          {
+            type: "image/png",
+          }
+        ),
+        "thumb-e2e-test.png"
+      );
+      form.append("nsfw", "false");
+      form.append("tags", "[]");
+      form.append("thumb", tinyThumb, "thumb.webp");
+
+      const upRes = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: form,
+        headers: { Authorization: `Bearer ${API_TOKEN}` },
+      });
+      assert.equal(upRes.status, 200);
+      const upBody = await upRes.json();
+      assert.ok(upBody.success, `upload failed: ${JSON.stringify(upBody)}`);
+      const fileKey = upBody.data;
+
+      // thumb2 应当取回缩略图字节
+      const thumbRes = await fetch(`${API_URL}/file/${fileKey}/thumb2`);
+      assert.equal(thumbRes.status, 200);
+      assert.ok(
+        (thumbRes.headers.get("content-type") || "").startsWith("image/"),
+        `unexpected thumb content-type: ${thumbRes.headers.get("content-type")}`
+      );
+      const thumbBytes = await thumbRes.arrayBuffer();
+      assert.ok(thumbBytes.byteLength > 0);
+
+      // 删除后缩略图同步清理
+      const delRes = await fetch(`${API_URL}/file/${fileKey}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_TOKEN}` },
+      });
+      assert.equal(delRes.status, 200);
+      const thumbGone = await fetch(`${API_URL}/file/${fileKey}/thumb2`);
+      assert.equal(thumbGone.status, 404);
     });
   });
 

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getTgFilePath, buildTgFileUrl } from "@utils/db-adapter/tg-tools";
 import { getAuthorizedFileAccess } from "./access";
+import { loadThumb } from "@utils/thumb-store";
 import type { Env } from "../../types/hono";
 import { fail } from "@utils/response";
 
@@ -40,31 +41,27 @@ thumbRoutes.get("/:key/thumb", async (c) => {
   }
 });
 
-// F2：服务前端 canvas 生成的 R2 缩略图（thumb: 前缀对象）。
-// 与主文件同桶、同生命周期；访问控制复用 getAuthorizedFileAccess
+// F2：服务前端 canvas 生成的缩略图（thumb-store：R2 或 KV 回退）。
+// 与主文件同生命周期；访问控制复用 getAuthorizedFileAccess
 // （私有文件的缩略图同样需要登录态）。
 thumbRoutes.get("/:key/thumb2", async (c) => {
   const key = c.req.param("key");
-  const r2 = c.env.oh_file_r2;
-
-  if (!r2) {
-    return fail(c, "R2 not configured", 500);
-  }
 
   const access = await getAuthorizedFileAccess(c.env, c.req.raw, key);
   if (access instanceof Response) {
     return access;
   }
 
-  const object = await r2.get(`thumb:${key}`);
-  if (!object) {
+  const thumb = await loadThumb(c.env, key);
+  if (!thumb) {
     return fail(c, "Thumbnail not found", 404);
   }
 
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("Cache-Control", "public, max-age=86400");
-  headers.set("etag", object.httpEtag);
-
-  return new Response(object.body, { status: 200, headers });
+  return new Response(thumb.body, {
+    status: 200,
+    headers: {
+      "Content-Type": thumb.contentType,
+      "Cache-Control": "public, max-age=86400",
+    },
+  });
 });
