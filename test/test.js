@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const FormData = require("form-data");
 
-const API_URL = "http://localhost:8788";
+const API_URL = "http://127.0.0.1:8788";
 const PASSWORD = "123456";
 const API_TOKEN = "123456";
 const trashPrefix = "trash:";
@@ -289,6 +289,29 @@ describe("API Endpoints", function () {
         { method: "POST" }
       );
       assert.equal(response.status, 401);
+    });
+
+    it("should reject anonymous /proxy/download (was S1 open proxy)", async function () {
+      const response = await fetch(
+        `${API_URL}/proxy/download?url=http://example.com/`
+      );
+      assert.equal(response.status, 401);
+    });
+
+    it("should reject anonymous /wallpaper/proxy (was S1 open proxy)", async function () {
+      const response = await fetch(
+        `${API_URL}/wallpaper/proxy?url=http://example.com/`
+      );
+      assert.equal(response.status, 401);
+    });
+
+    it("should allow authenticated /proxy/download (regression: functional path intact)", async function () {
+      const response = await fetch(
+        `${API_URL}/proxy/download?url=http://example.com/`,
+        { headers: { Cookie: authCookie } }
+      );
+      // example.com 可达时应为 200；上游偶发不可达时也必须是透传上游状态码而非 401
+      assert.notEqual(response.status, 401);
     });
   });
 

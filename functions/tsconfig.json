@@ -3,18 +3,14 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "node",
-    "lib": [
-      "dom",
-      "ES2022"
-    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["dom", "ES2022"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": [
-        "../shared/src/*"
-      ],
-      "@utils/*": [
-        "utils/*"
-      ]
+      "@shared/*": ["../shared/src/*"],
+      "@utils/*": ["utils/*"]
     }
-  },
+  }
 }
