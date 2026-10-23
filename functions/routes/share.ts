@@ -26,6 +26,50 @@ const shareKeyPrefix = "share:";
 // --- Helpers ---
 
 /**
+ * F1：分享密码哈希（SHA-256 hex）。
+ * 明文密码仅在创建请求中短暂存在，KV 只存哈希。
+ */
+async function hashSharePassword(password: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(password)
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * F1：验证分享访问密码。
+ * 有 passwordHash 的分享必须携带匹配密码（query 或 header）。
+ * 常数时间比较防时序侧信道。
+ */
+async function verifySharePassword(
+  shareData: ShareData,
+  c: {
+    req: {
+      query: (name: string) => string | undefined;
+      header: (name: string) => string | undefined;
+    };
+  }
+): Promise<boolean> {
+  if (!shareData.passwordHash) return true; // 无密码分享
+
+  const supplied = c.req.query("pw") || c.req.header("X-Share-Password") || "";
+  if (!supplied) return false;
+
+  const suppliedHash = await hashSharePassword(supplied);
+  if (suppliedHash.length !== shareData.passwordHash.length) return false;
+
+  // 常数时间比较
+  let diff = 0;
+  for (let i = 0; i < suppliedHash.length; i++) {
+    diff |= suppliedHash.charCodeAt(i) ^ shareData.passwordHash.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/**
  * 计算打包分享的总文件大小
  */
 function calcBundleTotalSize(files: BundleFileInfo[]): number {
@@ -54,6 +98,7 @@ const createShareSchema = z.object({
   fileKeys: z.array(z.string()).optional(), // bundle 模式
   bundleName: z.string().optional(), // bundle 模式下用户自定义名称
   expireIn: z.number().optional(), // Seconds from now, undefined means forever (or max KV limit)
+  password: z.string().min(1).max(64).optional(), // F1：访问密码（可选）
 });
 
 // 1. Create Share Link (Protected)
@@ -62,7 +107,7 @@ app.post(
   authMiddleware,
   zValidator("json", createShareSchema),
   async (c) => {
-    const { type, fileKey, fileKeys, bundleName, expireIn } =
+    const { type, fileKey, fileKeys, bundleName, expireIn, password } =
       c.req.valid("json");
     const kv = c.env.oh_file_url;
     const db = DBAdapterFactory.getAdapter(c.env);
@@ -72,6 +117,11 @@ app.post(
     const now = Date.now();
     const expiresAt =
       expireIn && expireIn > 0 ? now + expireIn * 1000 : undefined;
+
+    // F1：密码只存 SHA-256 哈希，明文不落 KV
+    const passwordHash = password
+      ? await hashSharePassword(password)
+      : undefined;
 
     // 单文件分享
     if (type === "single") {
@@ -89,6 +139,7 @@ app.post(
         fileName: file.metadata.fileName,
         fileSize: file.metadata.fileSize,
         expiresAt,
+        passwordHash,
       };
 
       await kv.put(shareKey, JSON.stringify(shareData), {
@@ -131,6 +182,7 @@ app.post(
       totalSize,
       createdAt: now,
       expiresAt,
+      passwordHash,
     };
 
     await kv.put(shareKey, JSON.stringify(shareData), {
@@ -201,6 +253,17 @@ app.get("/:token/meta", async (c) => {
   const shareData = await getKVData<ShareData>(kv, shareKey);
   if (!shareData) return fail(c, "Link expired or invalid", 404);
 
+  // F1：密码验证。未带密码时仅返回 hasPassword 标记（前端据此渲染密码输入框）
+  if (!(await verifySharePassword(shareData, c))) {
+    const isMissingPassword = !(
+      c.req.query("pw") || c.req.header("X-Share-Password")
+    );
+    if (isMissingPassword) {
+      return ok(c, { hasPassword: true });
+    }
+    return fail(c, "Invalid share password", 401);
+  }
+
   // 打包分享
   if (shareData.type === "bundle") {
     return ok(c, {
@@ -241,6 +304,11 @@ app.get("/:token/raw", async (c) => {
   const shareData = await getKVData<ShareData>(kv, shareKey);
   if (!shareData) return fail(c, "Link expired or invalid", 404);
 
+  // F1：密码门
+  if (!(await verifySharePassword(shareData, c))) {
+    return fail(c, "Invalid or missing share password", 401);
+  }
+
   const db = DBAdapterFactory.getAdapter(c.env);
 
   // 打包分享
@@ -274,6 +342,11 @@ app.get("/:token/download-all", async (c) => {
 
   const shareData = await getKVData<ShareData>(kv, shareKey);
   if (!shareData) return fail(c, "Link expired or invalid", 404);
+
+  // F1：密码门
+  if (!(await verifySharePassword(shareData, c))) {
+    return fail(c, "Invalid or missing share password", 401);
+  }
 
   // 只支持打包分享
   if (shareData.type !== "bundle") {

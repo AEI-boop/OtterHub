@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,20 +6,20 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { shareApi } from '@/lib/api';
-import { toast } from 'sonner';
-import { Copy, Loader2 } from 'lucide-react';
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { shareApi } from "@/lib/api";
+import { toast } from "sonner";
+import { Copy, Loader2 } from "lucide-react";
 
 interface ShareDialogProps {
   open: boolean;
@@ -28,34 +28,53 @@ interface ShareDialogProps {
   fileName: string;
 }
 
-export function ShareDialog({ open, onOpenChange, fileKey, fileName }: ShareDialogProps) {
+export function ShareDialog({
+  open,
+  onOpenChange,
+  fileKey,
+  fileName,
+}: ShareDialogProps) {
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
-  
-  const [expireIn, setExpireIn] = useState('3600');
-  const [customDays, setCustomDays] = useState('1');
+
+  const [expireIn, setExpireIn] = useState("3600");
+  const [customDays, setCustomDays] = useState("1");
+  const [password, setPassword] = useState("");
+  const [usePassword, setUsePassword] = useState(false);
 
   const handleCreateLink = async () => {
     let seconds: number | undefined;
 
     // 更简洁的参数计算逻辑
-    if (expireIn === 'custom') {
+    if (expireIn === "custom") {
       const days = parseInt(customDays, 10);
       if (!days || days < 1 || days > 365) {
-        return toast.error('请输入有效的天数 (1-365)');
+        return toast.error("请输入有效的天数 (1-365)");
       }
       seconds = days * 86400;
-    } else if (expireIn !== '-1') {
+    } else if (expireIn !== "-1") {
       seconds = parseInt(expireIn, 10);
+    }
+
+    // F1：密码长度校验
+    if (usePassword && (password.length < 1 || password.length > 64)) {
+      return toast.error("密码长度需在 1-64 字符之间");
     }
 
     setLoading(true);
     try {
-      const { token } = await shareApi.create({ fileKey, expireIn: seconds });
-      setShareLink(`${window.location.origin}/s?k=${token}`);
-      toast.success('分享链接已创建');
+      const { token } = await shareApi.create({
+        fileKey,
+        expireIn: seconds,
+        password: usePassword ? password : undefined,
+      });
+      // F1：有密码的分享把密码拼进链接（自用场景：链接即凭证，免手动传密码）
+      const pwQuery =
+        usePassword && password ? `&pw=${encodeURIComponent(password)}` : "";
+      setShareLink(`${window.location.origin}/s?k=${token}${pwQuery}`);
+      toast.success("分享链接已创建");
     } catch {
-      toast.error('创建分享链接失败');
+      toast.error("创建分享链接失败");
     } finally {
       setLoading(false);
     }
@@ -64,25 +83,31 @@ export function ShareDialog({ open, onOpenChange, fileKey, fileName }: ShareDial
   const handleCopy = () => {
     if (!shareLink) return;
     navigator.clipboard.writeText(shareLink);
-    toast.success('链接已复制');
+    toast.success("链接已复制");
   };
 
   const handleReset = () => {
     setShareLink(null);
-    setExpireIn('3600');
-    setCustomDays('1');
+    setExpireIn("3600");
+    setCustomDays("1");
+    setPassword("");
+    setUsePassword(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={(val) => {
-      onOpenChange(val);
-      if (!val) setTimeout(handleReset, 300); // 弹窗关闭动画结束后再重置状态
-    }}>
+    <Dialog
+      open={open}
+      onOpenChange={(val) => {
+        onOpenChange(val);
+        if (!val) setTimeout(handleReset, 300); // 弹窗关闭动画结束后再重置状态
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>分享文件</DialogTitle>
           <DialogDescription>
-            为 <span className="font-medium text-foreground">{fileName}</span> 创建临时分享链接
+            为 <span className="font-medium text-foreground">{fileName}</span>{" "}
+            创建临时分享链接
           </DialogDescription>
         </DialogHeader>
 
@@ -91,7 +116,9 @@ export function ShareDialog({ open, onOpenChange, fileKey, fileName }: ShareDial
             <div className="grid gap-2">
               <Label>有效期</Label>
               <Select value={expireIn} onValueChange={setExpireIn}>
-                <SelectTrigger><SelectValue placeholder="选择有效期" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择有效期" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="3600">1 小时</SelectItem>
                   <SelectItem value="86400">1 天</SelectItem>
@@ -102,7 +129,7 @@ export function ShareDialog({ open, onOpenChange, fileKey, fileName }: ShareDial
               </Select>
             </div>
 
-            {expireIn === 'custom' && (
+            {expireIn === "custom" && (
               <div className="grid gap-2">
                 <Label>自定义天数 (1-365)</Label>
                 <Input
@@ -111,14 +138,47 @@ export function ShareDialog({ open, onOpenChange, fileKey, fileName }: ShareDial
                   placeholder="输入天数"
                   onChange={(e) => {
                     // 正则过滤非数字(防止输入e、+、-等)，并用 Math.min/max 限制边界
-                    const val = e.target.value.replace(/\D/g, ''); 
-                    if (!val) return setCustomDays('');
-                    const clampedVal = Math.min(Math.max(parseInt(val, 10), 1), 365);
+                    const val = e.target.value.replace(/\D/g, "");
+                    if (!val) return setCustomDays("");
+                    const clampedVal = Math.min(
+                      Math.max(parseInt(val, 10), 1),
+                      365
+                    );
                     setCustomDays(clampedVal.toString());
                   }}
                 />
               </div>
             )}
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>访问密码</Label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={usePassword}
+                    onChange={(e) => setUsePassword(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  启用
+                </label>
+              </div>
+              {usePassword && (
+                <>
+                  <Input
+                    type="text"
+                    value={password}
+                    placeholder="输入访问密码（1-64 字符）"
+                    maxLength={64}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    密码会包含在生成的链接中，对方打开即通过；也可手动删除链接中的
+                    pw 参数，让对方输密码。
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2 py-4">
@@ -133,7 +193,9 @@ export function ShareDialog({ open, onOpenChange, fileKey, fileName }: ShareDial
           <div className="flex w-full justify-end gap-2">
             {!shareLink ? (
               <>
-                <Button variant="secondary" onClick={() => onOpenChange(false)}>取消</Button>
+                <Button variant="secondary" onClick={() => onOpenChange(false)}>
+                  取消
+                </Button>
                 <Button onClick={handleCreateLink} disabled={loading}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   创建链接
@@ -141,7 +203,9 @@ export function ShareDialog({ open, onOpenChange, fileKey, fileName }: ShareDial
               </>
             ) : (
               <>
-                <Button variant="secondary" onClick={handleReset}>继续分享</Button>
+                <Button variant="secondary" onClick={handleReset}>
+                  继续分享
+                </Button>
                 <Button onClick={() => onOpenChange(false)}>完成</Button>
               </>
             )}

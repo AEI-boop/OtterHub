@@ -47,6 +47,8 @@ export function BatchShareDialog({
   const [expireIn, setExpireIn] = useState<string>("3600");
   const [customDays, setCustomDays] = useState<string>("1");
   const [bundleName, setBundleName] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [usePassword, setUsePassword] = useState(false);
 
   // 对话框打开时重置状态
   useEffect(() => {
@@ -55,6 +57,8 @@ export function BatchShareDialog({
       setExpireIn("3600");
       setCustomDays("1");
       setBundleName("");
+      setPassword("");
+      setUsePassword(false);
     }
   }, [open]);
 
@@ -82,9 +86,13 @@ export function BatchShareDialog({
         fileKeys: isSingleFile ? undefined : files.map((f) => f.name),
         bundleName: isSingleFile ? undefined : bundleName.trim() || undefined,
         expireIn: seconds,
+        password: usePassword ? password : undefined,
       });
 
-      const url = `${window.location.origin}/s?k=${data.token}`;
+      // F1：有密码的分享把密码拼进链接（自用场景：链接即凭证）
+      const pwQuery =
+        usePassword && password ? `&pw=${encodeURIComponent(password)}` : "";
+      const url = `${window.location.origin}/s?k=${data.token}${pwQuery}`;
       setShareLink(url);
       toast.success(
         isSingleFile
@@ -229,6 +237,41 @@ export function BatchShareDialog({
                 />
               </div>
             )}
+
+            {/* F1：访问密码 */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="share-password">访问密码</Label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="share-password-toggle"
+                    checked={usePassword}
+                    onChange={(e) => setUsePassword(e.target.checked)}
+                    className="accent-primary"
+                  />
+                  启用
+                </label>
+              </div>
+              {usePassword && (
+                <>
+                  <Input
+                    id="share-password"
+                    type="text"
+                    value={password}
+                    placeholder="输入访问密码（1-64 字符）"
+                    maxLength={64}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isSubmitting}
+                    className="bg-secondary/30 border-glass-border text-foreground"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    密码会包含在生成的链接中，对方打开即通过；也可手动删除链接中的
+                    pw 参数，让对方输密码。
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex items-center space-x-2 py-4">

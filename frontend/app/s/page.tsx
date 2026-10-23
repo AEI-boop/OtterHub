@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { shareApi } from "@/lib/api/share";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -27,6 +28,7 @@ import {
   ChevronRight,
   X,
   CalendarClock,
+  Lock,
 } from "lucide-react";
 import { formatFileSize, formatTime, getFileCategoryByName } from "@/lib/utils";
 import { ShareMetaResponse } from "@shared/types";
@@ -59,20 +61,55 @@ const triggerDownload = (url: string, filename: string) => {
 
 function ShareContent() {
   const token = useSearchParams().get("k");
+  const urlPassword = useSearchParams().get("pw") || undefined; // F1：链接内嵌密码
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<ShareMetaResponse | null>(null);
+  const [needPassword, setNeedPassword] = useState(false); // F1：后端标记需要密码
+  const [inputPassword, setInputPassword] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
   const [isActioning, setIsActioning] = useState(false); // 合并下载状态
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
+  // 当前生效的密码：优先链接内嵌，其次用户输入
+  const activePassword = urlPassword || inputPassword || undefined;
 
   useEffect(() => {
     if (!token) return (setError("Invalid link"), setLoading(false));
     shareApi
-      .getMeta(token)
-      .then(setMeta)
+      .getMeta(token, urlPassword)
+      .then((m) => {
+        if (m && (m as any).hasPassword) {
+          setNeedPassword(true);
+          setLoading(false);
+          return;
+        }
+        setMeta(m);
+        setLoading(false);
+      })
       .catch((err) => setError(err.message || "Failed to load file info"))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, urlPassword]);
+
+  // F1：用户提交密码
+  const handleVerifyPassword = async () => {
+    if (!token || !inputPassword) return;
+    setIsVerifying(true);
+    try {
+      const m = await shareApi.getMeta(token, inputPassword);
+      if (m && (m as any).hasPassword) {
+        setError("密码错误");
+        return;
+      }
+      setNeedPassword(false);
+      setMeta(m);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || "密码错误");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   const previewableFiles = useMemo(
     () =>
@@ -123,6 +160,40 @@ function ShareContent() {
   };
 
   if (loading) return <FullScreenLoader />;
+  if (needPassword)
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-sm border-white/20 shadow-xl backdrop-blur-md bg-card/80 z-10">
+          <CardHeader className="text-center space-y-3">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+              <Lock className="h-7 w-7 text-primary" />
+            </div>
+            <CardTitle className="text-lg">此分享受密码保护</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Input
+              type="password"
+              value={inputPassword}
+              placeholder="输入访问密码"
+              onChange={(e) => setInputPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleVerifyPassword()}
+              autoFocus
+            />
+            {error && (
+              <p className="text-sm text-destructive text-center">{error}</p>
+            )}
+            <Button
+              className="w-full"
+              onClick={handleVerifyPassword}
+              disabled={isVerifying || !inputPassword}
+            >
+              {isVerifying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              验证并查看
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   if (error) return <ErrorCard error={error} />;
 
   const isBundle = meta?.type === "bundle";
@@ -137,6 +208,7 @@ function ShareContent() {
           currentIndex={currentPreviewIndexInList}
           onClose={() => setPreviewIndex(null)}
           onNav={handlePreviewNav}
+          password={activePassword}
         />
       )}
 
@@ -174,7 +246,11 @@ function ShareContent() {
                 {meta?.files?.map((file, i) => {
                   const cat = getFileCategory(file.name);
                   const isPrev = ["image", "video", "audio"].includes(cat);
-                  const url = shareApi.getDownloadUrl(token!, file.key);
+                  const url = shareApi.getDownloadUrl(
+                    token!,
+                    file.key,
+                    activePassword
+                  );
 
                   return (
                     <div
@@ -229,7 +305,12 @@ function ShareContent() {
                           onClick={(e) => {
                             e.stopPropagation();
                             executeDownload(
-                              () => shareApi.getDownloadUrl(token!, file.key),
+                              () =>
+                                shareApi.getDownloadUrl(
+                                  token!,
+                                  file.key,
+                                  activePassword
+                                ),
                               file.name
                             );
                           }}
@@ -246,7 +327,11 @@ function ShareContent() {
               token && (
                 <div className="relative aspect-video w-full overflow-hidden">
                   <img
-                    src={shareApi.getDownloadUrl(token)}
+                    src={shareApi.getDownloadUrl(
+                      token,
+                      undefined,
+                      activePassword
+                    )}
                     alt={meta.fileName}
                     className="h-full w-full object-contain"
                   />
@@ -264,11 +349,16 @@ function ShareContent() {
               onClick={() =>
                 isBundle
                   ? executeDownload(
-                      () => shareApi.getDownloadAllUrl(token!),
+                      () => shareApi.getDownloadAllUrl(token!, activePassword),
                       `${meta?.bundleName || `share-${token!.slice(0, 8)}`}.zip`
                     )
                   : executeDownload(
-                      () => shareApi.getDownloadUrl(token!),
+                      () =>
+                        shareApi.getDownloadUrl(
+                          token!,
+                          undefined,
+                          activePassword
+                        ),
                       meta?.fileName || "download"
                     )
               }
@@ -340,9 +430,10 @@ const PreviewModal = ({
   currentIndex,
   onClose,
   onNav,
+  password,
 }: any) => {
   const cat = getFileCategory(file.name);
-  const url = shareApi.getDownloadUrl(token, file.key);
+  const url = shareApi.getDownloadUrl(token, file.key, password);
 
   // 核心逻辑：只有真正点击到背景那一层时才触发关闭
   const handleBackdropClick = (e: React.MouseEvent) => {

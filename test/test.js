@@ -377,6 +377,89 @@ describe("API Endpoints", function () {
       const thumbGone = await fetch(`${API_URL}/file/${fileKey}/thumb2`);
       assert.equal(thumbGone.status, 404);
     });
+
+    it("F1: password-protected share gates raw/meta/download-all", async function () {
+      this.timeout(15000);
+      // 先上传一个文件作为分享对象
+      const form = new NativeFormData();
+      form.append(
+        "file",
+        new Blob(["f1-password-share-test"], { type: "text/plain" }),
+        "f1-share-test.txt"
+      );
+      form.append("nsfw", "false");
+      form.append("tags", "[]");
+      const upRes = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: form,
+        headers: { Authorization: `Bearer ${API_TOKEN}` },
+      });
+      assert.equal(upRes.status, 200);
+      const fileKey = (await upRes.json()).data;
+
+      // 创建带密码的分享
+      const createRes = await fetch(`${API_URL}/share/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: authCookie,
+        },
+        body: JSON.stringify({
+          type: "single",
+          fileKey,
+          expireIn: 3600,
+          password: "f1-test-password",
+        }),
+      });
+      assert.equal(createRes.status, 200);
+      const { data } = await createRes.json();
+      const token = data.token;
+
+      // 1) 无密码 meta → hasPassword 标记（200 但不泄露内容）
+      const metaNoPw = await fetch(`${API_URL}/share/${token}/meta`);
+      assert.equal(metaNoPw.status, 200);
+      const metaNoPwBody = await metaNoPw.json();
+      assert.ok(metaNoPwBody.data.hasPassword);
+      assert.ok(
+        !metaNoPwBody.data.fileName,
+        "meta must not leak fileName without password"
+      );
+
+      // 2) 错误密码 meta → 401
+      const metaWrong = await fetch(
+        `${API_URL}/share/${token}/meta?pw=wrong-password`
+      );
+      assert.equal(metaWrong.status, 401);
+
+      // 3) 正确密码 meta → 正常内容
+      const metaOk = await fetch(
+        `${API_URL}/share/${token}/meta?pw=f1-test-password`
+      );
+      assert.equal(metaOk.status, 200);
+      const metaOkBody = await metaOk.json();
+      assert.equal(metaOkBody.data.fileName, "f1-share-test.txt");
+
+      // 4) 无密码 raw → 401
+      const rawNoPw = await fetch(`${API_URL}/share/${token}/raw`);
+      assert.equal(rawNoPw.status, 401);
+
+      // 5) 正确密码 raw → 200 文件内容
+      const rawOk = await fetch(
+        `${API_URL}/share/${token}/raw?pw=f1-test-password`
+      );
+      assert.equal(rawOk.status, 200);
+      assert.equal(await rawOk.text(), "f1-password-share-test");
+
+      // 6) 清理：撤销分享 + 删除文件
+      await fetch(`${API_URL}/share/revoke/${token}`, {
+        method: "DELETE",
+        headers: { Cookie: authCookie },
+      });
+      await fetch(`${API_URL}/file/${fileKey}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_TOKEN}` },
+      });
+    });
   });
 
   // 删除

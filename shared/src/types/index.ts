@@ -128,6 +128,7 @@ export interface SingleShareData {
   fileSize: number;
   createdAt: number;
   expiresAt?: number;
+  passwordHash?: string; // F1：访问密码的 SHA-256 hex（无密码则缺省）
 }
 
 // 打包分享数据
@@ -139,6 +140,7 @@ export interface BundleShareData {
   totalSize: number;
   createdAt: number;
   expiresAt?: number;
+  passwordHash?: string; // F1：访问密码的 SHA-256 hex（无密码则缺省）
 }
 
 // 分享数据联合类型
@@ -173,6 +175,7 @@ export interface CreateShareRequest {
   fileKeys?: string[]; // bundle 模式
   bundleName?: string; // 用户自定义打包名称（bundle 模式）
   expireIn?: number;
+  password?: string; // F1：访问密码（1-64 字符，可选）
 }
 
 // 分享元数据响应
