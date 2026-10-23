@@ -387,6 +387,36 @@ export function GeneralTab({
               </HintBox>
             )}
 
+            <SettingItem
+              title="上传剥离 EXIF"
+              desc="图片经浏览器重编码后上传，去除 GPS / 机型等元数据"
+            >
+              <Switch
+                checked={store.stripExif}
+                onCheckedChange={store.setStripExif}
+              />
+            </SettingItem>
+            {store.stripExif && (
+              <HintBox icon={ShieldAlert} variant="warning">
+                开启后上传的是重编码版本（体积通常更小，质量略降），原图不会保留。
+              </HintBox>
+            )}
+
+            <SettingItem
+              title="生成缩略图"
+              desc="上传时生成 320px WebP 缩略图，图库加载更快"
+            >
+              <Switch
+                checked={store.generateThumb}
+                onCheckedChange={store.setGenerateThumb}
+              />
+            </SettingItem>
+            {store.generateThumb && !store.stripExif && (
+              <HintBox icon={Sparkles} variant="info">
+                仅生成缩略图不影响原图：图床存储的仍是原始文件。
+              </HintBox>
+            )}
+
             <SettingItem title="默认上传标签" desc="上传时自动添加的标签">
               <TagSelector
                 tags={store.defaultUploadTags}

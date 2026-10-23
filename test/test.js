@@ -306,12 +306,20 @@ describe("API Endpoints", function () {
     });
 
     it("should allow authenticated /proxy/download (regression: functional path intact)", async function () {
+      this.timeout(10000);
+      // 用本地 wrangler 自身作回源目标，不依赖外网。
+      // 127.0.0.1 会被 SSRF guard 拦，但拦截发生在鉴权之后：
+      // 返回 401 = 鉴权失败（回归）；返回 500 + "blocked URL" = 鉴权已通过（预期）。
       const response = await fetch(
-        `${API_URL}/proxy/download?url=http://example.com/`,
+        `${API_URL}/proxy/download?url=http://127.0.0.1:1/`,
         { headers: { Cookie: authCookie } }
       );
-      // example.com 可达时应为 200；上游偶发不可达时也必须是透传上游状态码而非 401
+      const body = await response.text();
       assert.notEqual(response.status, 401);
+      assert.ok(
+        body.includes("blocked"),
+        `expected SSRF-guard response, got: ${body}`
+      );
     });
   });
 

@@ -16,6 +16,8 @@ export interface SettingsSnapshot {
   imageLoadMode: ImageLoadMode;
   defaultUploadTags: FileTag[];
   enableImageAnalysis: boolean;
+  stripExif: boolean;
+  generateThumb: boolean;
 }
 
 interface GeneralStoreState {
@@ -25,6 +27,8 @@ interface GeneralStoreState {
   imageLoadMode: ImageLoadMode;
   defaultUploadTags: FileTag[];
   enableImageAnalysis: boolean;
+  stripExif: boolean;
+  generateThumb: boolean;
   telegramWebhookInfo: TelegramWebhookInfo | null;
 
   setDataSaverThreshold: (threshold: number) => void;
@@ -33,6 +37,8 @@ interface GeneralStoreState {
   setImageLoadMode: (mode: ImageLoadMode) => void;
   setDefaultUploadTags: (tags: FileTag[]) => void;
   setEnableImageAnalysis: (enabled: boolean) => void;
+  setStripExif: (enabled: boolean) => void;
+  setGenerateThumb: (enabled: boolean) => void;
   setTelegramWebhookInfo: (info: TelegramWebhookInfo | null) => void;
 
   fetchSettings: () => Promise<void>;
@@ -50,6 +56,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
       imageLoadMode: ImageLoadMode.DataSaver,
       defaultUploadTags: [],
       enableImageAnalysis: true,
+      stripExif: false,
+      generateThumb: false,
       telegramWebhookInfo: null,
 
       setDataSaverThreshold: (threshold) =>
@@ -60,6 +68,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
       setDefaultUploadTags: (tags) => set({ defaultUploadTags: tags }),
       setEnableImageAnalysis: (enabled) =>
         set({ enableImageAnalysis: enabled }),
+      setStripExif: (enabled) => set({ stripExif: enabled }),
+      setGenerateThumb: (enabled) => set({ generateThumb: enabled }),
       setTelegramWebhookInfo: (info) => set({ telegramWebhookInfo: info }),
 
       fetchSettings: async () => {
@@ -73,6 +83,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
               imageLoadMode: settings.imageLoadMode,
               defaultUploadTags: settings.defaultUploadTags || [],
               enableImageAnalysis: settings.enableImageAnalysis !== false,
+              stripExif: settings.stripExif === true,
+              generateThumb: settings.generateThumb === true,
             });
             toast.success("已从云端恢复数据");
           }
@@ -89,6 +101,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
           imageLoadMode,
           defaultUploadTags,
           enableImageAnalysis,
+          stripExif,
+          generateThumb,
         } = get();
         try {
           await generalSettingsApi.update({
@@ -98,6 +112,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
             imageLoadMode,
             defaultUploadTags,
             enableImageAnalysis,
+            stripExif,
+            generateThumb,
           });
           if (!options?.silent) {
             toast.success("设置已保存到云端");
@@ -117,6 +133,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
           imageLoadMode,
           defaultUploadTags,
           enableImageAnalysis,
+          stripExif,
+          generateThumb,
         } = get();
         return {
           dataSaverThreshold,
@@ -125,6 +143,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
           imageLoadMode,
           defaultUploadTags: [...defaultUploadTags],
           enableImageAnalysis,
+          stripExif,
+          generateThumb,
         };
       },
 
@@ -137,6 +157,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
           current.nsfwDetection !== snapshot.nsfwDetection ||
           current.imageLoadMode !== snapshot.imageLoadMode ||
           current.enableImageAnalysis !== snapshot.enableImageAnalysis ||
+          current.stripExif !== snapshot.stripExif ||
+          current.generateThumb !== snapshot.generateThumb ||
           JSON.stringify([...current.defaultUploadTags].sort()) !==
             JSON.stringify([...snapshot.defaultUploadTags].sort())
         );
@@ -151,6 +173,8 @@ export const useGeneralSettingsStore = create<GeneralStoreState>()(
         imageLoadMode: state.imageLoadMode,
         defaultUploadTags: state.defaultUploadTags,
         enableImageAnalysis: state.enableImageAnalysis,
+        stripExif: state.stripExif,
+        generateThumb: state.generateThumb,
       }),
     }
   )

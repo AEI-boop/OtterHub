@@ -1,10 +1,7 @@
-import {
-  Music,
-  Video,
-  FileText,
-} from "lucide-react";
+import { Music, Video, FileText } from "lucide-react";
 import { shouldBlur, shouldLoadImage, cn } from "@/lib/utils";
 import { getFileUrl } from "@/lib/api";
+import { API_URL } from "@/lib/api/config";
 import { FileTag, FileType } from "@shared/types";
 import { FileImagePreview } from "../FileImagePreview";
 import { ImageLoadMode } from "@/lib/types";
@@ -37,7 +34,9 @@ export function FileContent({
   className,
   imgSrc,
 }: FileContentProps) {
-  const dataSaverThreshold = useGeneralSettingsStore((s) => s.dataSaverThreshold);
+  const dataSaverThreshold = useGeneralSettingsStore(
+    (s) => s.dataSaverThreshold
+  );
   const blur = shouldBlur({ safeMode, tags });
   const load = shouldLoadImage({
     fileType,
@@ -47,6 +46,21 @@ export function FileContent({
   });
 
   if (fileType === FileType.Image) {
+    // F2：有前端生成的缩略图时卡片优先用缩略图（原图仅在预览大图时加载）
+    if (thumbUrl && fileType === FileType.Image) {
+      return (
+        <img
+          src={`${API_URL}${thumbUrl}`}
+          alt={fileKey}
+          loading="lazy"
+          decoding="async"
+          className={cn(
+            "w-full h-full object-cover transition-all duration-300",
+            blur ? "blur-xl scale-110" : "blur-0 scale-100"
+          )}
+        />
+      );
+    }
     return (
       <FileImagePreview
         src={imgSrc || getFileUrl(fileKey)}

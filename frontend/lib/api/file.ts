@@ -48,7 +48,7 @@ async function parseApiResponse<T>(raw: string): Promise<T> {
 function xhrPostForm<T>(
   url: string,
   form: FormData,
-  onProgress?: (p: UploadProgress) => void,
+  onProgress?: (p: UploadProgress) => void
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -109,11 +109,15 @@ export async function uploadFileWithProgress(
   file: File,
   options: SingleUploadPayload,
   onProgress?: (p: UploadProgress) => void,
+  thumb?: Blob | null
 ): Promise<string> {
   const form = new FormData();
   form.append("file", file);
   form.append("nsfw", options.nsfw ? "true" : "false");
   form.append("tags", JSON.stringify(options.tags ?? []));
+  if (thumb) {
+    form.append("thumb", thumb, "thumb.webp");
+  }
 
   const url = `${API_URL}/upload`;
   return xhrPostForm<string>(url, form, onProgress);
@@ -123,7 +127,7 @@ export async function uploadFileWithProgress(
  * 初始化分片上传
  */
 export async function uploadChunkInit(
-  payload: ChunkUploadInitPayload,
+  payload: ChunkUploadInitPayload
 ): Promise<string> {
   return unwrap<string>(
     client.upload.chunk.init.$post({
@@ -138,7 +142,7 @@ export async function uploadChunkInit(
 export async function uploadChunk(
   key: string,
   chunkIndex: number,
-  chunkFile: File | Blob,
+  chunkFile: File | Blob
 ): Promise<string> {
   const res = await unwrap<string | number>( // API might return number or string for data? Check type.
     client.upload.chunk.$post({
@@ -156,7 +160,7 @@ export async function uploadChunkWithProgress(
   key: string,
   chunkIndex: number,
   chunkFile: File | Blob,
-  onProgress?: (p: UploadProgress) => void,
+  onProgress?: (p: UploadProgress) => void
 ): Promise<string> {
   const form = new FormData();
   form.append("key", key);
@@ -169,7 +173,7 @@ export async function uploadChunkWithProgress(
 }
 
 export async function getUploadChunkProgress(
-  key: string,
+  key: string
 ): Promise<ChunkProcessingProgress> {
   return unwrap<ChunkProcessingProgress>(
     client.upload.chunk.progress.$get({
@@ -299,13 +303,19 @@ export async function editMetadata(
 /**
  * AI分析图片生成描述，blob 为前端已压缩的图片
  */
-export async function analyzeImage(key: string, blob: Blob): Promise<{ desc: string }> {
+export async function analyzeImage(
+  key: string,
+  blob: Blob
+): Promise<{ desc: string }> {
   const formData = new FormData();
   formData.append("image", blob, "image.jpg");
-  const res = await fetch(`${API_URL}/file/${encodeURIComponent(key)}/analyze`, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
+  const res = await fetch(
+    `${API_URL}/file/${encodeURIComponent(key)}/analyze`,
+    {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    }
+  );
   return unwrap<{ desc: string }>(res);
 }
