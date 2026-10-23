@@ -237,6 +237,61 @@ describe("API Endpoints", function () {
     });
   });
 
+  // 安全回归测试：鉴权绕过防护
+  // 背景：authMiddleware 曾按扩展名放行路径，而文件 key 天然以 .png/.svg/.json
+  // 结尾，导致匿名 DELETE /file/img:xxx.png（任意删除）与
+  // 匿名 GET /trash/trash:img:xxx.png（回收站读取）绕过鉴权。
+  describe("Security: auth bypass regression", function () {
+    it("should reject anonymous DELETE on .png-suffixed file key (was CRITICAL bypass)", async function () {
+      const response = await fetch(
+        `${API_URL}/file/img:securityprobe0001.png`,
+        { method: "DELETE" }
+      );
+      assert.equal(response.status, 401);
+    });
+
+    it("should reject anonymous DELETE on .json-suffixed file key", async function () {
+      const response = await fetch(
+        `${API_URL}/file/doc:securityprobe0001.json`,
+        { method: "DELETE" }
+      );
+      assert.equal(response.status, 401);
+    });
+
+    it("should reject anonymous GET on trash file with .png suffix (was HIGH bypass)", async function () {
+      const response = await fetch(
+        `${API_URL}/trash/trash:img:securityprobe0001.png`
+      );
+      assert.equal(response.status, 401);
+    });
+
+    it("should NOT delete real file via anonymous DELETE, file must remain accessible", async function () {
+      if (!uploadedFileKey) {
+        this.skip();
+      }
+
+      // 匿名删除真实上传的文件（key 以 .svg 结尾，同样命中旧绕过路径）
+      const delResponse = await fetch(`${API_URL}/file/${uploadedFileKey}`, {
+        method: "DELETE",
+      });
+      assert.equal(delResponse.status, 401);
+
+      // 文件必须仍然存在（认证后可访问）
+      const checkResponse = await fetch(`${API_URL}/file/${uploadedFileKey}`, {
+        headers: { Cookie: authCookie },
+      });
+      assert.equal(checkResponse.status, 200);
+    });
+
+    it("should reject anonymous toggle-like (POST must not ride static-asset bypass)", async function () {
+      const response = await fetch(
+        `${API_URL}/file/img:securityprobe0001.png/toggle-like`,
+        { method: "POST" }
+      );
+      assert.equal(response.status, 401);
+    });
+  });
+
   // 删除
   describe("DELETE /file/:key", function () {
     it("should delete the uploaded file successfully", async function () {

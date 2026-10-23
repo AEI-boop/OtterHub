@@ -49,8 +49,14 @@ export async function getAuthorizedFileAccess(
   if (!authorized) {
     const token = getAuthCookie(request);
     if (token) {
+      // 安全修复（fail closed）：secret 缺失时直接拒绝，
+      // 不再回退到空字符串/公开常量
+      const secret = env.JWT_SECRET ?? env.PASSWORD;
+      if (!secret) {
+        return failResponse("Unauthorized access to private file", 401);
+      }
       try {
-        await verifyJWT(token, env.JWT_SECRET ?? env.PASSWORD ?? "");
+        await verifyJWT(token, secret);
         authorized = true;
       } catch {
         // Ignore invalid token and return unauthorized below.

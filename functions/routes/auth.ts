@@ -24,7 +24,12 @@ authRoutes.post(
       return fail(c, 'Unauthorized', 401);
     }
 
-    const secret = env.JWT_SECRET || env.PASSWORD || 'secret';
+    // 安全修复（fail closed）：拒绝在未配置 secret 的情况下签发 JWT
+    // （此处 PASSWORD 已通过上方比对必然非空，此分支为显式防御）
+    const secret = env.JWT_SECRET || env.PASSWORD;
+    if (!secret) {
+      return fail(c, 'Auth secret not configured', 500);
+    }
     const token = await signJWT(secret);
 
     const isSecure = c.req.url.startsWith("https");
