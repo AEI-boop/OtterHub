@@ -1,0 +1,8 @@
+name: Probe Registration
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "workflow registered ok"
